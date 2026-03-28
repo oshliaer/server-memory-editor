@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory JSONL Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        svg {
+            width: 100%;
+            height: 100vh;
+            cursor: move;
+        }
+
+        /* --- Controls panel (top-left) --- */
+        #controls {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+            z-index: 100;
+            width: 280px;
+            font-size: 14px;
+        }
+
+        #controls h3 {
+            margin-bottom: 12px;
+            color: #333;
+            font-size: 16px;
+        }
+
+        #search {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        #search:focus { outline: none; border-color: #667eea; }
+
+        .control-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .control-btn {
+            flex: 1;
+            padding: 6px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.15s;
+        }
+
+        .control-btn:hover { background: #f0f0f0; }
+
+        #stats {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            padding: 14px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .upload-area:hover { border-color: #667eea; background: #f8f9ff; }
+        .upload-area.dragover { border-color: #667eea; background: #f0f1ff; }
+
+        #file-input { display: none; }
+
+        /* --- Details panel (top-right) --- */
+        #details {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 360px;
+            max-height: calc(100vh - 32px);
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+            overflow-y: auto;
+            display: none;
+            z-index: 100;
+        }
+
+        #details .close-btn {
+            float: right;
+            cursor: pointer;
+            font-size: 24px;
+            color: #999;
+            line-height: 20px;
+            border: none;
+            background: none;
+        }
+
+        #details .close-btn:hover { color: #333; }
+
+        #details h2 {
+            margin-top: 0;
+            color: #333;
+            font-size: 18px;
+            padding-right: 30px;
+            word-break: break-word;
+        }
+
+        .type-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: white;
+            margin-bottom: 12px;
+        }
+
+        .detail-info {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 12px;
+        }
+
+        #details h3 {
+            font-size: 14px;
+            color: #555;
+            margin: 14px 0 8px;
+        }
+
+        .observation {
+            background: #f8f9fa;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            border-radius: 4px;
+            font-size: 13px;
+            line-height: 1.5;
+            border-left: 3px solid #667eea;
+            word-break: break-word;
+        }
+
+        .relation-item {
+            background: #e8f0fe;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .relation-item .rel-top {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+        }
+
+        .relation-item .rel-arrow { color: #667eea; font-weight: bold; }
+
+        .relation-item .rel-name {
+            color: #1a73e8;
+            cursor: pointer;
+            text-decoration: underline;
+            word-break: break-word;
+        }
+
+        .relation-item .rel-type {
+            color: #888;
+            font-size: 12px;
+            font-style: italic;
+            margin-top: 2px;
+            padding-left: 18px;
+        }
+
+        .relation-item .rel-name:hover { color: #0d47a1; }
+
+        .actions { margin-top: 16px; }
+
+        /* --- Legend (bottom-left) --- */
+        #legend {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            background: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+            max-height: 250px;
+            overflow-y: auto;
+            z-index: 100;
+            display: none;
+        }
+
+        #legend strong { font-size: 13px; color: #333; }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-top: 6px;
+            font-size: 12px;
+            color: #555;
+        }
+
+        .legend-color {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            margin-right: 8px;
+            flex-shrink: 0;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+
+        /* --- Empty state --- */
+        #empty-state {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #999;
+            z-index: 50;
+            pointer-events: none;
+        }
+
+        #empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+        #empty-state p { font-size: 16px; margin-bottom: 8px; }
+        #empty-state .hint { font-size: 13px; }
+
+        /* --- Dropzone overlay --- */
+        #dropzone-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(102, 126, 234, 0.15);
+            border: 4px dashed #667eea;
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        /* --- Graph styles --- */
+        .node {
+            stroke: white;
+            stroke-width: 2px;
+            cursor: pointer;
+        }
+
+        .node:hover { stroke: #333; stroke-width: 3px; }
+        .node.selected { stroke: #ff4444; stroke-width: 4px; }
+        .node.ghost { stroke-dasharray: 4,2; }
+        .node.duplicate { stroke-width: 4px; }
+
+        .link {
+            stroke: #999;
+            stroke-opacity: 0.5;
+            fill: none;
+        }
+
+        .node-label {
+            font-size: 11px;
+            pointer-events: none;
+            text-anchor: middle;
+            fill: #333;
+            paint-order: stroke;
+            stroke: white;
+            stroke-width: 3px;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .dimmed { opacity: 0.1 !important; }
+    </style>
+</head>
+<body>
+    <div id="empty-state">
+        <div class="icon">&#128202;</div>
+        <p>Перетащите .jsonl файл сюда</p>
+        <p class="hint">или нажмите кнопку загрузки в панели слева</p>
+    </div>
+
+    <div id="dropzone-overlay">Отпустите файл для загрузки</div>
+
+    <div id="controls">
+        <h3>Memory Visualizer</h3>
+        <input type="text" id="search" placeholder="Поиск..." disabled />
+        <div class="control-buttons">
+            <button class="control-btn" id="btn-reset">Сброс</button>
+            <button class="control-btn" id="btn-zoom-in">+</button>
+            <button class="control-btn" id="btn-zoom-out">&minus;</button>
+            <button class="control-btn" id="btn-export" disabled>Export</button>
+        </div>
+        <div id="stats"></div>
+        <div class="upload-area" id="upload-area">
+            <div style="font-size:1.5em;margin-bottom:4px;">&#128193;</div>
+            <div>Загрузить .jsonl / .json</div>
+        </div>
+        <input type="file" id="file-input" accept=".jsonl,.json" />
+    </div>
+
+    <div id="details">
+        <button class="close-btn" id="close-details">&times;</button>
+        <h2 id="detail-name"></h2>
+        <span class="type-badge" id="detail-type"></span>
+        <div class="detail-info" id="detail-info"></div>
+        <h3>Observations (<span id="detail-obs-count">0</span>)</h3>
+        <div id="detail-observations"></div>
+        <h3 id="detail-out-header">Outgoing</h3>
+        <div id="detail-outgoing"></div>
+        <h3 id="detail-in-header">Incoming</h3>
+        <div id="detail-incoming"></div>
+        <div class="actions" id="detail-actions"></div>
+    </div>
+
+    <div id="legend">
+        <strong>Entity Types</strong>
+        <div id="legend-items"></div>
+    </div>
+
+    <script>
+    // ========================================================================
+    // DataModel
+    // ========================================================================
+    const DataModel = {
+        entities: new Map(),
+        relations: [],
+        _stats: { duplicates: 0, ghosts: 0, skipped: 0 },
+
+        clear() {
+            this.entities.clear();
+            this.relations = [];
+            this._stats = { duplicates: 0, ghosts: 0, skipped: 0 };
+        },
+
+        loadFromText(text) {
+            this.clear();
+            let rawEntities = [];
+            let rawRelations = [];
+
+            // Detect format: JSON vs JSONL
+            const trimmed = text.trim();
+            try {
+                const json = JSON.parse(trimmed);
+                if (json && typeof json === 'object' && (Array.isArray(json.entities) || Array.isArray(json.relations))) {
+                    rawEntities = json.entities || [];
+                    rawRelations = json.relations || [];
+                } else {
+                    // Single JSON object — treat as JSONL with one line
+                    this._parseJSONL(trimmed, rawEntities, rawRelations);
+                }
+            } catch {
+                // Not valid JSON — parse as JSONL
+                this._parseJSONL(trimmed, rawEntities, rawRelations);
+            }
+
+            // 1. Process entities — merge duplicates
+            for (const e of rawEntities) {
+                if (!e.name) continue;
+                const existing = this.entities.get(e.name);
+                if (existing) {
+                    // Merge observations (exact string dedup)
+                    const obsSet = new Set(existing.observations);
+                    for (const obs of (e.observations || [])) obsSet.add(obs);
+                    existing.observations = [...obsSet];
+                    existing.entityType = e.entityType || existing.entityType;
+                    existing.duplicateCount++;
+                    this._stats.duplicates++;
+                } else {
+                    this.entities.set(e.name, {
+                        name: e.name,
+                        entityType: e.entityType || 'unknown',
+                        observations: [...(e.observations || [])],
+                        duplicateCount: 1,
+                        isGhost: false
+                    });
+                }
+            }
+
+            // 2. Process relations — dedup by from+to+relationType
+            const relSet = new Set();
+            for (const r of rawRelations) {
+                if (!r.from || !r.to) continue;
+                const key = `${r.from}\0${r.to}\0${r.relationType || ''}`;
+                if (relSet.has(key)) continue;
+                relSet.add(key);
+                this.relations.push({
+                    from: r.from,
+                    to: r.to,
+                    relationType: r.relationType || ''
+                });
+            }
+
+            // 3. Create ghost nodes for dangling relations
+            for (const r of this.relations) {
+                for (const name of [r.from, r.to]) {
+                    if (!this.entities.has(name)) {
+                        this.entities.set(name, {
+                            name,
+                            entityType: 'unknown',
+                            observations: [],
+                            duplicateCount: 0,
+                            isGhost: true
+                        });
+                        this._stats.ghosts++;
+                    }
+                }
+            }
+
+            console.log(`Loaded: ${this.entities.size} entities (${this._stats.duplicates} dup, ${this._stats.ghosts} ghost), ${this.relations.length} relations, ${this._stats.skipped} skipped`);
+        },
+
+        _parseJSONL(text, entities, relations) {
+            const lines = text.split('\n');
+            for (const line of lines) {
+                const t = line.trim();
+                if (!t) continue;
+                try {
+                    const obj = JSON.parse(t);
+                    if (obj.type === 'entity') entities.push(obj);
+                    else if (obj.type === 'relation') relations.push(obj);
+                } catch {
+                    this._stats.skipped++;
+                    console.warn('Skipped invalid line:', t.substring(0, 80));
+                }
+            }
+        },
+
+        toJSONL() {
+            const lines = [];
+            for (const [, e] of this.entities) {
+                if (e.isGhost) continue;
+                lines.push(JSON.stringify({
+                    type: 'entity',
+                    name: e.name,
+                    entityType: e.entityType,
+                    observations: e.observations
+                }));
+            }
+            for (const r of this.relations) {
+                lines.push(JSON.stringify({
+                    type: 'relation',
+                    from: r.from,
+                    to: r.to,
+                    relationType: r.relationType
+                }));
+            }
+            return lines.join('\n') + '\n';
+        },
+
+        getStats() {
+            return {
+                entities: this.entities.size,
+                relations: this.relations.length,
+                duplicates: this._stats.duplicates,
+                ghosts: this._stats.ghosts,
+                skipped: this._stats.skipped
+            };
+        }
+    };
+
+    // ========================================================================
+    // Renderer
+    // ========================================================================
+    let svg, g, zoomBehavior, simulation;
+    let nodeSelection, linkSelection, labelSelection;
+    let colorScale;
+    let selectedNodeName = null;
+
+    const width = () => window.innerWidth;
+    const height = () => window.innerHeight;
+
+    function nodeRadius(d) {
+        return Math.max(8, Math.min(28, 5 + d.observations.length * 2));
+    }
+
+    function initSVG() {
+        svg = d3.select('body')
+            .insert('svg', '#empty-state')
+            .attr('width', width())
+            .attr('height', height());
+
+        g = svg.append('g');
+
+        // Arrow marker
+        svg.append('defs').append('marker')
+            .attr('id', 'arrowhead')
+            .attr('viewBox', '0 -5 10 10')
+            .attr('refX', 2)
+            .attr('refY', 0)
+            .attr('orient', 'auto')
+            .attr('markerWidth', 8)
+            .attr('markerHeight', 8)
+            .append('path')
+            .attr('d', 'M0,-4L8,0L0,4')
+            .attr('fill', '#999');
+
+        // Zoom
+        zoomBehavior = d3.zoom()
+            .scaleExtent([0.1, 10])
+            .on('zoom', (event) => g.attr('transform', event.transform));
+
+        svg.call(zoomBehavior);
+
+        // Click on background -> deselect
+        svg.on('click', (event) => {
+            if (event.target.tagName === 'svg') clearSelection();
+        });
+    }
+
+    function render(model) {
+        // Prepare data arrays
+        const nodes = [];
+        for (const [, e] of model.entities) {
+            nodes.push({ ...e });
+        }
+
+        const links = model.relations.map(r => ({
+            source: r.from,
+            target: r.to,
+            relationType: r.relationType
+        }));
+
+        // Color scale
+        const types = [...new Set(nodes.map(n => n.entityType))].sort();
+        colorScale = d3.scaleOrdinal(d3.schemeTableau10).domain(types);
+
+        // Clear
+        g.selectAll('*').remove();
+
+        // Links
+        const linkGroup = g.append('g').attr('id', 'links-group');
+        linkSelection = linkGroup.selectAll('line')
+            .data(links)
+            .enter().append('line')
+            .attr('class', 'link')
+            .attr('stroke-width', 1.5)
+            .attr('marker-end', 'url(#arrowhead)');
+
+        // Nodes
+        const nodeGroup = g.append('g').attr('id', 'nodes-group');
+        nodeSelection = nodeGroup.selectAll('circle')
+            .data(nodes, d => d.name)
+            .enter().append('circle')
+            .attr('class', d => {
+                let cls = 'node';
+                if (d.isGhost) cls += ' ghost';
+                if (d.duplicateCount > 1) cls += ' duplicate';
+                return cls;
+            })
+            .attr('r', d => nodeRadius(d))
+            .attr('fill', d => d.isGhost ? '#ccc' : colorScale(d.entityType))
+            .on('click', (event, d) => {
+                event.stopPropagation();
+                selectNode(d.name);
+            })
+            .call(d3.drag()
+                .on('start', dragStarted)
+                .on('drag', dragged)
+                .on('end', dragEnded));
+
+        nodeSelection.append('title')
+            .text(d => `${d.name}\n${d.entityType}\n${d.observations.length} obs`);
+
+        // Labels
+        const labelGroup = g.append('g').attr('id', 'labels-group');
+        labelSelection = labelGroup.selectAll('text')
+            .data(nodes, d => d.name)
+            .enter().append('text')
+            .attr('class', 'node-label')
+            .text(d => d.name.length > 25 ? d.name.substring(0, 23) + '...' : d.name)
+            .attr('dy', d => -nodeRadius(d) - 4);
+
+        // Simulation
+        if (simulation) simulation.stop();
+        simulation = d3.forceSimulation(nodes)
+            .force('link', d3.forceLink(links).id(d => d.name).distance(100))
+            .force('charge', d3.forceManyBody().strength(-500))
+            .force('center', d3.forceCenter(width() / 2, height() / 2))
+            .force('collision', d3.forceCollide(d => nodeRadius(d) + 5))
+            .on('tick', ticked);
+
+        // Fit-to-view only once after initial layout
+        let fitted = false;
+        simulation.on('end', () => {
+            if (!fitted) {
+                fitted = true;
+                fitToView();
+            }
+        });
+
+        // Show UI
+        document.getElementById('empty-state').style.display = 'none';
+        document.getElementById('legend').style.display = 'block';
+        document.getElementById('search').disabled = false;
+        document.getElementById('btn-export').disabled = false;
+
+        updateLegend(types);
+        updateStats();
+    }
+
+    function ticked() {
+        linkSelection.each(function(d) {
+            const dx = d.target.x - d.source.x;
+            const dy = d.target.y - d.source.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const tR = nodeRadius(d.target);
+            const sR = nodeRadius(d.source);
+            // Shorten line to node boundaries
+            d3.select(this)
+                .attr('x1', d.source.x + dx / dist * sR)
+                .attr('y1', d.source.y + dy / dist * sR)
+                .attr('x2', d.target.x - dx / dist * (tR + 8))
+                .attr('y2', d.target.y - dy / dist * (tR + 8));
+        });
+
+        nodeSelection
+            .attr('cx', d => d.x)
+            .attr('cy', d => d.y);
+
+        labelSelection
+            .attr('x', d => d.x)
+            .attr('y', d => d.y);
+    }
+
+    function fitToView() {
+        const bbox = g.node().getBBox();
+        if (bbox.width === 0 || bbox.height === 0) return;
+        const pad = 60;
+        const w = width();
+        const h = height();
+        const scale = 0.9 * Math.min((w - pad * 2) / bbox.width, (h - pad * 2) / bbox.height);
+        const tx = w / 2 - scale * (bbox.x + bbox.width / 2);
+        const ty = h / 2 - scale * (bbox.y + bbox.height / 2);
+        svg.transition().duration(500)
+            .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+    }
+
+    // Drag
+    function dragStarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+    }
+
+    function dragEnded(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+    }
+
+    // ========================================================================
+    // UI
+    // ========================================================================
+
+    function selectNode(name) {
+        selectedNodeName = name;
+        const entity = DataModel.entities.get(name);
+        if (!entity) return;
+
+        // Highlight
+        highlightConnections(name);
+
+        // Detail panel
+        const panel = document.getElementById('details');
+        panel.style.display = 'block';
+
+        document.getElementById('detail-name').textContent = entity.name;
+
+        const badge = document.getElementById('detail-type');
+        badge.textContent = entity.entityType;
+        badge.style.backgroundColor = entity.isGhost ? '#ccc' : colorScale(entity.entityType);
+
+        // Info line
+        const infoParts = [];
+        if (entity.duplicateCount > 1) infoParts.push(`Встречается ${entity.duplicateCount} раз`);
+        if (entity.isGhost) infoParts.push('Ghost: entity не найдена в файле');
+        document.getElementById('detail-info').textContent = infoParts.join(' · ');
+
+        // Observations
+        document.getElementById('detail-obs-count').textContent = entity.observations.length;
+        const obsEl = document.getElementById('detail-observations');
+        obsEl.innerHTML = '';
+        for (const obs of entity.observations) {
+            const div = document.createElement('div');
+            div.className = 'observation';
+            div.textContent = obs;
+            obsEl.appendChild(div);
+        }
+
+        // Outgoing relations
+        const outgoing = DataModel.relations.filter(r => r.from === name);
+        const outEl = document.getElementById('detail-outgoing');
+        const outHeader = document.getElementById('detail-out-header');
+        outEl.innerHTML = '';
+        outHeader.textContent = `Исходящие (${outgoing.length})`;
+        for (const r of outgoing) {
+            outEl.appendChild(createRelationItem('→', r.relationType, r.to));
+        }
+
+        // Incoming relations
+        const incoming = DataModel.relations.filter(r => r.to === name);
+        const inEl = document.getElementById('detail-incoming');
+        const inHeader = document.getElementById('detail-in-header');
+        inEl.innerHTML = '';
+        inHeader.textContent = `Входящие (${incoming.length})`;
+        for (const r of incoming) {
+            inEl.appendChild(createRelationItem('←', r.relationType, r.from));
+        }
+    }
+
+    function createRelationItem(arrow, type, targetName) {
+        const div = document.createElement('div');
+        div.className = 'relation-item';
+        // Line 1: arrow + entity name
+        const top = document.createElement('div');
+        top.className = 'rel-top';
+        top.innerHTML = `<span class="rel-arrow">${arrow}</span>`;
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'rel-name';
+        nameSpan.textContent = targetName;
+        nameSpan.addEventListener('click', () => selectNode(targetName));
+        top.appendChild(nameSpan);
+        div.appendChild(top);
+        // Line 2: relation type
+        if (type) {
+            const typeDiv = document.createElement('div');
+            typeDiv.className = 'rel-type';
+            typeDiv.textContent = type;
+            div.appendChild(typeDiv);
+        }
+        return div;
+    }
+
+    function highlightConnections(name) {
+        const connected = new Set([name]);
+        for (const r of DataModel.relations) {
+            if (r.from === name) connected.add(r.to);
+            if (r.to === name) connected.add(r.from);
+        }
+
+        nodeSelection
+            .classed('dimmed', d => !connected.has(d.name))
+            .classed('selected', d => d.name === name);
+
+        linkSelection.classed('dimmed', d => {
+            const sName = typeof d.source === 'object' ? d.source.name : d.source;
+            const tName = typeof d.target === 'object' ? d.target.name : d.target;
+            return sName !== name && tName !== name;
+        });
+
+        labelSelection.classed('dimmed', d => !connected.has(d.name));
+    }
+
+    function clearSelection() {
+        selectedNodeName = null;
+        document.getElementById('details').style.display = 'none';
+        nodeSelection && nodeSelection.classed('dimmed', false).classed('selected', false);
+        linkSelection && linkSelection.classed('dimmed', false);
+        labelSelection && labelSelection.classed('dimmed', false);
+    }
+
+    // Search
+    function setupSearch() {
+        document.getElementById('search').addEventListener('input', (e) => {
+            const q = e.target.value.toLowerCase().trim();
+            if (!q) {
+                nodeSelection.classed('dimmed', false);
+                linkSelection.classed('dimmed', false);
+                labelSelection.classed('dimmed', false);
+                return;
+            }
+
+            const matches = new Set();
+            for (const [, ent] of DataModel.entities) {
+                const haystack = [ent.name, ent.entityType, ...ent.observations].join(' ').toLowerCase();
+                if (haystack.includes(q)) matches.add(ent.name);
+            }
+
+            nodeSelection.classed('dimmed', d => !matches.has(d.name));
+            labelSelection.classed('dimmed', d => !matches.has(d.name));
+            linkSelection.classed('dimmed', d => {
+                const sName = typeof d.source === 'object' ? d.source.name : d.source;
+                const tName = typeof d.target === 'object' ? d.target.name : d.target;
+                return !matches.has(sName) && !matches.has(tName);
+            });
+        });
+    }
+
+    // Legend
+    function updateLegend(types) {
+        const container = document.getElementById('legend-items');
+        container.innerHTML = '';
+        for (const t of types) {
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+            const circle = document.createElement('div');
+            circle.className = 'legend-color';
+            circle.style.backgroundColor = colorScale(t);
+            const label = document.createElement('span');
+            label.textContent = t;
+            item.appendChild(circle);
+            item.appendChild(label);
+            container.appendChild(item);
+        }
+    }
+
+    // Stats
+    function updateStats() {
+        const s = DataModel.getStats();
+        const parts = [`${s.entities} entities`];
+        const sub = [];
+        if (s.duplicates > 0) sub.push(`${s.duplicates} dup`);
+        if (s.ghosts > 0) sub.push(`${s.ghosts} ghost`);
+        if (sub.length) parts[0] += ` (${sub.join(', ')})`;
+        parts.push(`${s.relations} relations`);
+        if (s.skipped > 0) parts.push(`${s.skipped} skipped`);
+        document.getElementById('stats').textContent = parts.join(' \u00b7 ');
+    }
+
+    // Export
+    function exportJSONL() {
+        const text = DataModel.toJSONL();
+        const blob = new Blob([text], { type: 'application/x-jsonlines' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'memory.jsonl';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // File loading
+    function handleFile(file) {
+        if (!file) return;
+        if (!file.name.endsWith('.jsonl') && !file.name.endsWith('.json')) {
+            alert('Поддерживаются только .jsonl и .json файлы');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            DataModel.loadFromText(e.target.result);
+            if (DataModel.entities.size === 0) {
+                alert('Файл не содержит данных или имеет неверный формат');
+                return;
+            }
+            render(DataModel);
+        };
+        reader.readAsText(file);
+    }
+
+    // ========================================================================
+    // Init
+    // ========================================================================
+    document.addEventListener('DOMContentLoaded', () => {
+        initSVG();
+        setupSearch();
+
+        // File input
+        const fileInput = document.getElementById('file-input');
+        document.getElementById('upload-area').addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+        // Buttons
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            svg.transition().duration(500).call(zoomBehavior.transform, d3.zoomIdentity);
+        });
+        document.getElementById('btn-zoom-in').addEventListener('click', () => {
+            svg.transition().duration(200).call(zoomBehavior.scaleBy, 1.4);
+        });
+        document.getElementById('btn-zoom-out').addEventListener('click', () => {
+            svg.transition().duration(200).call(zoomBehavior.scaleBy, 0.7);
+        });
+        document.getElementById('btn-export').addEventListener('click', exportJSONL);
+        document.getElementById('close-details').addEventListener('click', clearSelection);
+
+        // Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') clearSelection();
+        });
+
+        // Document-level drag and drop
+        const overlay = document.getElementById('dropzone-overlay');
+        let dragCounter = 0;
+
+        document.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            dragCounter++;
+            overlay.style.display = 'flex';
+        });
+
+        document.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dragCounter--;
+            if (dragCounter <= 0) {
+                dragCounter = 0;
+                overlay.style.display = 'none';
+            }
+        });
+
+        document.addEventListener('dragover', (e) => {
+            e.preventDefault();
+        });
+
+        document.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragCounter = 0;
+            overlay.style.display = 'none';
+            const file = e.dataTransfer.files[0];
+            if (file) handleFile(file);
+        });
+    });
+    </script>
+</body>
+</html>
