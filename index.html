@@ -357,7 +357,7 @@
             <button class="control-btn" id="btn-export" disabled>Export</button>
         </div>
         <div id="stats"></div>
-        <div class="upload-area" id="upload-area">
+        <div class="upload-area" id="upload-area" role="button" tabindex="0">
             <div style="font-size:1.5em;margin-bottom:4px;">&#128193;</div>
             <div>Загрузить .jsonl / .json</div>
         </div>
@@ -408,7 +408,12 @@
             const trimmed = text.trim();
             try {
                 const json = JSON.parse(trimmed);
-                if (json && typeof json === 'object' && (Array.isArray(json.entities) || Array.isArray(json.relations))) {
+                if (Array.isArray(json)) {
+                    for (const obj of json) {
+                        if (obj.type === 'entity') rawEntities.push(obj);
+                        else if (obj.type === 'relation') rawRelations.push(obj);
+                    }
+                } else if (json && typeof json === 'object' && (Array.isArray(json.entities) || Array.isArray(json.relations))) {
                     rawEntities = json.entities || [];
                     rawRelations = json.relations || [];
                 } else {
@@ -510,6 +515,9 @@
                 }));
             }
             for (const r of this.relations) {
+                const from = this.entities.get(r.from);
+                const to = this.entities.get(r.to);
+                if (!from || !to || from.isGhost || to.isGhost) continue;
                 lines.push(JSON.stringify({
                     type: 'relation',
                     from: r.from,
@@ -848,58 +856,53 @@
         return div;
     }
 
+    // Shared dimming helpers
+    function dimByNameSet(nameSet) {
+        if (!nodeSelection) return;
+        nodeSelection.classed('dimmed', d => !nameSet.has(d.name));
+        labelSelection.classed('dimmed', d => !nameSet.has(d.name));
+        linkSelection.classed('dimmed', d => {
+            const sName = typeof d.source === 'object' ? d.source.name : d.source;
+            const tName = typeof d.target === 'object' ? d.target.name : d.target;
+            return !nameSet.has(sName) && !nameSet.has(tName);
+        });
+    }
+
+    function clearDimming() {
+        if (!nodeSelection) return;
+        nodeSelection.classed('dimmed', false).classed('selected', false);
+        linkSelection.classed('dimmed', false);
+        labelSelection.classed('dimmed', false);
+    }
+
     function highlightConnections(name) {
         const connected = new Set([name]);
         for (const r of DataModel.relations) {
             if (r.from === name) connected.add(r.to);
             if (r.to === name) connected.add(r.from);
         }
-
-        nodeSelection
-            .classed('dimmed', d => !connected.has(d.name))
-            .classed('selected', d => d.name === name);
-
-        linkSelection.classed('dimmed', d => {
-            const sName = typeof d.source === 'object' ? d.source.name : d.source;
-            const tName = typeof d.target === 'object' ? d.target.name : d.target;
-            return sName !== name && tName !== name;
-        });
-
-        labelSelection.classed('dimmed', d => !connected.has(d.name));
+        dimByNameSet(connected);
+        nodeSelection.classed('selected', d => d.name === name);
     }
 
     function clearSelection() {
         selectedNodeName = null;
         document.getElementById('details').style.display = 'none';
-        nodeSelection && nodeSelection.classed('dimmed', false).classed('selected', false);
-        linkSelection && linkSelection.classed('dimmed', false);
-        labelSelection && labelSelection.classed('dimmed', false);
+        clearDimming();
     }
 
     // Search
     function setupSearch() {
         document.getElementById('search').addEventListener('input', (e) => {
             const q = e.target.value.toLowerCase().trim();
-            if (!q) {
-                nodeSelection.classed('dimmed', false);
-                linkSelection.classed('dimmed', false);
-                labelSelection.classed('dimmed', false);
-                return;
-            }
+            if (!q) { clearDimming(); return; }
 
             const matches = new Set();
             for (const [, ent] of DataModel.entities) {
                 const haystack = [ent.name, ent.entityType, ...ent.observations].join(' ').toLowerCase();
                 if (haystack.includes(q)) matches.add(ent.name);
             }
-
-            nodeSelection.classed('dimmed', d => !matches.has(d.name));
-            labelSelection.classed('dimmed', d => !matches.has(d.name));
-            linkSelection.classed('dimmed', d => {
-                const sName = typeof d.source === 'object' ? d.source.name : d.source;
-                const tName = typeof d.target === 'object' ? d.target.name : d.target;
-                return !matches.has(sName) && !matches.has(tName);
-            });
+            dimByNameSet(matches);
         });
     }
 
@@ -959,11 +962,8 @@
 
     function toggleFilter(type) {
         if (activeFilter === type) {
-            // Deactivate — show all
             activeFilter = null;
-            nodeSelection.classed('dimmed', false);
-            linkSelection.classed('dimmed', false);
-            labelSelection.classed('dimmed', false);
+            clearDimming();
         } else {
             activeFilter = type;
             const matchFn = type === 'ghost'
@@ -971,14 +971,7 @@
                 : d => d.duplicateCount > 1;
             const matchNames = new Set();
             nodeSelection.each(d => { if (matchFn(d)) matchNames.add(d.name); });
-
-            nodeSelection.classed('dimmed', d => !matchNames.has(d.name));
-            labelSelection.classed('dimmed', d => !matchNames.has(d.name));
-            linkSelection.classed('dimmed', d => {
-                const sName = typeof d.source === 'object' ? d.source.name : d.source;
-                const tName = typeof d.target === 'object' ? d.target.name : d.target;
-                return !matchNames.has(sName) && !matchNames.has(tName);
-            });
+            dimByNameSet(matchNames);
         }
         updateStats();
     }
@@ -998,14 +991,22 @@
     // File loading
     function handleFile(file) {
         if (!file) return;
-        if (!file.name.endsWith('.jsonl') && !file.name.endsWith('.json')) {
+        const fileName = file.name.toLowerCase();
+        if (!fileName.endsWith('.jsonl') && !fileName.endsWith('.json')) {
             alert('Поддерживаются только .jsonl и .json файлы');
             return;
         }
         const reader = new FileReader();
         reader.onload = (e) => {
+            const prevEntities = new Map(DataModel.entities);
+            const prevRelations = [...DataModel.relations];
+            const prevStats = { ...DataModel._stats };
             DataModel.loadFromText(e.target.result);
             if (DataModel.entities.size === 0) {
+                // Restore previous state
+                DataModel.entities = prevEntities;
+                DataModel.relations = prevRelations;
+                DataModel._stats = prevStats;
                 alert('Файл не содержит данных или имеет неверный формат');
                 return;
             }
@@ -1023,7 +1024,14 @@
 
         // File input
         const fileInput = document.getElementById('file-input');
-        document.getElementById('upload-area').addEventListener('click', () => fileInput.click());
+        const uploadArea = document.getElementById('upload-area');
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                fileInput.click();
+            }
+        });
         fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
 
         // Buttons
@@ -1048,14 +1056,20 @@
         const overlay = document.getElementById('dropzone-overlay');
         let dragCounter = 0;
 
+        function isFileDrag(e) {
+            return e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.includes('Files');
+        }
+
         document.addEventListener('dragenter', (e) => {
             e.preventDefault();
+            if (!isFileDrag(e)) return;
             dragCounter++;
             overlay.style.display = 'flex';
         });
 
         document.addEventListener('dragleave', (e) => {
             e.preventDefault();
+            if (!isFileDrag(e)) return;
             dragCounter--;
             if (dragCounter <= 0) {
                 dragCounter = 0;

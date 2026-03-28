@@ -28,9 +28,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Relation deduplication and ghost-node generation for dangling references
 - D3 v7 force-directed graph visualization
 - Dynamic Tableau10 color palette for entity types
-- Shortened arrows (dynamic refX) with direction indicators
+- Arrows shortened to node boundaries in ticked() with fixed small marker refX
 - Ghost nodes (dashed stroke) for dangling references
-- Duplicate indicators (thick stroke) with count badges
+- Duplicate indicators (thick stroke) with info in detail panel
 - Interactive detail panel with clickable relations for graph navigation
 - Neighbor highlighting and dimming on node selection
 - Full-text search with type filtering
@@ -45,4 +45,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 - Crash from dangling relations (now handled with ghost-nodes)
 - Duplicate nodes appearing multiple times (now merged with count tracking)
-- Arrow positioning with hardcoded refX (now dynamically calculated)
+- Arrow positioning with hardcoded refX=25 (now lines shortened to node boundary in ticked(), marker uses fixed small refX)

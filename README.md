@@ -1,6 +1,6 @@
 # Memory JSONL Visualizer & Editor
 
-Web-based visualizer and editor for MCP server-memory JSONL files. Interactive graph visualization with D3.js v7, full-text search, entity/relation management, and export capabilities.
+Web-based visualizer for [MCP server-memory](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) JSONL files. Interactive graph visualization with D3.js v7, full-text search, and export capabilities. Editing features are planned for future phases.
 
 Reverse-engineered from [mcp-memory-visualizer](https://github.com/dzivkovi/mcp-memory-visualizer) with bug fixes and enhancements.
 
@@ -11,9 +11,9 @@ Version: **0.1.1** ([changelog](CHANGELOG.md))
 ## Features
 
 - **Graph Visualization**: D3.js force-directed layout with dynamic entity type coloring
-- **Interactive Navigation**: Click entities to view details, hover to highlight neighbors
-- **Search & Filter**: Full-text search with type filtering
-- **Duplicate Detection**: Identifies and merges duplicate entities, shows count badges
+- **Interactive Navigation**: Click entities to view details and highlight neighbors
+- **Search**: Full-text search across name, entity type, and observations
+- **Duplicate Detection**: Identifies and merges duplicate entities with version tracking
 - **Dangling References**: Handles unresolved relations with ghost-nodes
 - **Data Export**: Export current graph state as JSONL
 - **Statistics**: Entity, relation, and type counts
@@ -29,13 +29,14 @@ Version: **0.1.1** ([changelog](CHANGELOG.md))
 
 ## File Format
 
-The visualizer accepts standard MCP server-memory JSONL files:
+The visualizer accepts standard [MCP server-memory](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) JSONL files:
 
 ```jsonl
-{"type": "entity", "name": "Node Name", "entityType": "category"}
+{"type": "entity", "name": "Node Name", "entityType": "category", "observations": ["fact 1", "fact 2"]}
 {"type": "relation", "from": "Node Name", "to": "Target Name", "relationType": "connects_to"}
-{"type": "observation", "entityName": "Node Name", "contents": ["fact 1", "fact 2"]}
 ```
+
+Also supports JSON format: `{"entities": [...], "relations": [...]}`
 
 ## Requirements
 
@@ -51,7 +52,7 @@ The visualizer accepts standard MCP server-memory JSONL files:
 
 ## Agents & Automation
 
-- Memory MCP Client: Integrates with MCP server-memory for real-time graph updates
+- MCP integration planned for phase 3
 - GitHub Issues: [Issue #7](https://github.com/oshliaer/server-memory-editor/issues/7) (umbrella), #1-#6 (phase 1), #8-#9 (interactive filtering)
 
 ## Configuration
