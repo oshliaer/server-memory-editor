@@ -197,6 +197,49 @@
 
         .actions { margin-top: 16px; }
 
+        /* Clickable info badges */
+        .detail-info .clickable {
+            color: #1a73e8;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .detail-info .clickable:hover { color: #0d47a1; }
+
+        /* Duplicate versions list */
+        .versions-list { margin-top: 8px; display: none; }
+        .versions-list.open { display: block; }
+
+        .version-entry {
+            background: #fff3e0;
+            border-left: 3px solid #ff9800;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .version-entry .ver-type {
+            font-weight: 600;
+            color: #e65100;
+            margin-bottom: 4px;
+        }
+
+        .version-entry .ver-obs {
+            color: #555;
+            line-height: 1.4;
+        }
+
+        /* Clickable stats */
+        #stats .stat-filter {
+            color: #1a73e8;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        #stats .stat-filter:hover { color: #0d47a1; }
+        #stats .stat-filter.active { color: #d32f2f; font-weight: 600; }
+
         /* --- Legend (bottom-left) --- */
         #legend {
             position: absolute;
@@ -326,6 +369,7 @@
         <h2 id="detail-name"></h2>
         <span class="type-badge" id="detail-type"></span>
         <div class="detail-info" id="detail-info"></div>
+        <div class="versions-list" id="detail-versions"></div>
         <h3>Observations (<span id="detail-obs-count">0</span>)</h3>
         <div id="detail-observations"></div>
         <h3 id="detail-out-header">Outgoing</h3>
@@ -376,25 +420,31 @@
                 this._parseJSONL(trimmed, rawEntities, rawRelations);
             }
 
-            // 1. Process entities — merge duplicates
+            // 1. Process entities — merge duplicates, store original versions
             for (const e of rawEntities) {
                 if (!e.name) continue;
+                const version = {
+                    entityType: e.entityType || 'unknown',
+                    observations: [...(e.observations || [])]
+                };
                 const existing = this.entities.get(e.name);
                 if (existing) {
                     // Merge observations (exact string dedup)
                     const obsSet = new Set(existing.observations);
-                    for (const obs of (e.observations || [])) obsSet.add(obs);
+                    for (const obs of version.observations) obsSet.add(obs);
                     existing.observations = [...obsSet];
                     existing.entityType = e.entityType || existing.entityType;
                     existing.duplicateCount++;
+                    existing._versions.push(version);
                     this._stats.duplicates++;
                 } else {
                     this.entities.set(e.name, {
                         name: e.name,
                         entityType: e.entityType || 'unknown',
-                        observations: [...(e.observations || [])],
+                        observations: [...version.observations],
                         duplicateCount: 1,
-                        isGhost: false
+                        isGhost: false,
+                        _versions: [version]
                     });
                 }
             }
@@ -699,10 +749,49 @@
         badge.style.backgroundColor = entity.isGhost ? '#ccc' : colorScale(entity.entityType);
 
         // Info line
-        const infoParts = [];
-        if (entity.duplicateCount > 1) infoParts.push(`Встречается ${entity.duplicateCount} раз`);
-        if (entity.isGhost) infoParts.push('Ghost: entity не найдена в файле');
-        document.getElementById('detail-info').textContent = infoParts.join(' · ');
+        const infoEl = document.getElementById('detail-info');
+        const versionsEl = document.getElementById('detail-versions');
+        infoEl.innerHTML = '';
+        versionsEl.innerHTML = '';
+        versionsEl.classList.remove('open');
+
+        if (entity.duplicateCount > 1) {
+            const dupSpan = document.createElement('span');
+            dupSpan.className = 'clickable';
+            dupSpan.textContent = `Встречается ${entity.duplicateCount} раз — показать версии`;
+            dupSpan.addEventListener('click', () => {
+                versionsEl.classList.toggle('open');
+                dupSpan.textContent = versionsEl.classList.contains('open')
+                    ? `Встречается ${entity.duplicateCount} раз — скрыть версии`
+                    : `Встречается ${entity.duplicateCount} раз — показать версии`;
+            });
+            infoEl.appendChild(dupSpan);
+
+            // Populate versions
+            entity._versions.forEach((v, i) => {
+                const entry = document.createElement('div');
+                entry.className = 'version-entry';
+                const typeDiv = document.createElement('div');
+                typeDiv.className = 'ver-type';
+                typeDiv.textContent = `#${i + 1}: ${v.entityType}`;
+                entry.appendChild(typeDiv);
+                if (v.observations.length) {
+                    const obsDiv = document.createElement('div');
+                    obsDiv.className = 'ver-obs';
+                    obsDiv.textContent = v.observations.join(' | ');
+                    entry.appendChild(obsDiv);
+                }
+                versionsEl.appendChild(entry);
+            });
+        }
+
+        if (entity.isGhost) {
+            if (infoEl.childNodes.length) infoEl.appendChild(document.createTextNode(' · '));
+            const ghostSpan = document.createElement('span');
+            ghostSpan.style.color = '#888';
+            ghostSpan.textContent = 'Ghost: entity не найдена в файле';
+            infoEl.appendChild(ghostSpan);
+        }
 
         // Observations
         document.getElementById('detail-obs-count').textContent = entity.observations.length;
@@ -833,16 +922,65 @@
     }
 
     // Stats
+    let activeFilter = null; // 'ghost' | 'dup' | null
+
     function updateStats() {
         const s = DataModel.getStats();
-        const parts = [`${s.entities} entities`];
-        const sub = [];
-        if (s.duplicates > 0) sub.push(`${s.duplicates} dup`);
-        if (s.ghosts > 0) sub.push(`${s.ghosts} ghost`);
-        if (sub.length) parts[0] += ` (${sub.join(', ')})`;
-        parts.push(`${s.relations} relations`);
-        if (s.skipped > 0) parts.push(`${s.skipped} skipped`);
-        document.getElementById('stats').textContent = parts.join(' \u00b7 ');
+        const el = document.getElementById('stats');
+        el.innerHTML = '';
+
+        el.appendChild(document.createTextNode(`${s.entities} entities`));
+
+        if (s.duplicates > 0 || s.ghosts > 0) {
+            el.appendChild(document.createTextNode(' ('));
+            if (s.duplicates > 0) {
+                const dupLink = document.createElement('span');
+                dupLink.className = 'stat-filter' + (activeFilter === 'dup' ? ' active' : '');
+                dupLink.textContent = `${s.duplicates} dup`;
+                dupLink.addEventListener('click', () => toggleFilter('dup'));
+                el.appendChild(dupLink);
+            }
+            if (s.duplicates > 0 && s.ghosts > 0) {
+                el.appendChild(document.createTextNode(', '));
+            }
+            if (s.ghosts > 0) {
+                const ghostLink = document.createElement('span');
+                ghostLink.className = 'stat-filter' + (activeFilter === 'ghost' ? ' active' : '');
+                ghostLink.textContent = `${s.ghosts} ghost`;
+                ghostLink.addEventListener('click', () => toggleFilter('ghost'));
+                el.appendChild(ghostLink);
+            }
+            el.appendChild(document.createTextNode(')'));
+        }
+
+        el.appendChild(document.createTextNode(` \u00b7 ${s.relations} relations`));
+        if (s.skipped > 0) el.appendChild(document.createTextNode(` \u00b7 ${s.skipped} skipped`));
+    }
+
+    function toggleFilter(type) {
+        if (activeFilter === type) {
+            // Deactivate — show all
+            activeFilter = null;
+            nodeSelection.classed('dimmed', false);
+            linkSelection.classed('dimmed', false);
+            labelSelection.classed('dimmed', false);
+        } else {
+            activeFilter = type;
+            const matchFn = type === 'ghost'
+                ? d => d.isGhost
+                : d => d.duplicateCount > 1;
+            const matchNames = new Set();
+            nodeSelection.each(d => { if (matchFn(d)) matchNames.add(d.name); });
+
+            nodeSelection.classed('dimmed', d => !matchNames.has(d.name));
+            labelSelection.classed('dimmed', d => !matchNames.has(d.name));
+            linkSelection.classed('dimmed', d => {
+                const sName = typeof d.source === 'object' ? d.source.name : d.source;
+                const tName = typeof d.target === 'object' ? d.target.name : d.target;
+                return !matchNames.has(sName) && !matchNames.has(tName);
+            });
+        }
+        updateStats();
     }
 
     // Export

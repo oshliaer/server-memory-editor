@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.1] — 2026-03-28
+
+### Fixed
+- fitToView now called only once on initial load instead of after every drag (added `fitted` flag)
+
+### Changed
+- Duplicate and relation item layout: two-line format displays entity name (line 1, clickable) and relationType (line 2, smaller font) to prevent text truncation on long relation types
+- DataModel now preserves original versions of duplicates in `_versions` array (entityType and observations)
+
+### Added
+- Clickable duplicate version viewer: "Found N times — show versions" in detail panel reveals all original records with their entityType and observations
+- Clickable filters in statistics panel: clicking "N dup" or "N ghost" filters graph to show only duplicates or ghost nodes; clicking again resets filter
+- Test data updated: memory.jsonl expanded with duplicate entities having different entityType/observations and additional ghost node relationships
+
 ## [0.1.0] — 2026-03-28
 
 ### Added
