@@ -1,0 +1,27 @@
+{"type":"entity","name":"server-memory-editor","entityType":"project","observations":["Веб-визуализатор и редактор для файлов memory.jsonl от MCP server-memory","Один файл index.html, D3.js v7 с CDN, без фреймворков","Репозиторий: github.com/oshliaer/server-memory-editor","Фаза 1 (viewer) реализована, фазы 2 (CRUD) и 3 (MCP-интеграция) запланированы","Архитектура: DataModel (мутабельный state) + Renderer (D3) + UI (обработчики)","Фаза 1 (viewer MVP) завершена: парсинг JSONL, D3 граф, интерактивность, поиск, экспорт","Исправлены баги оригинала: dangling relations (ghost-ноды), дубликаты (merge+count), укорочение стрелок (динамическое refX)","Created: package.json, CHANGELOG.md, README.md","Версия: 0.1.1 (patch-релиз от 2026-03-28)","Улучшения UI: исправлен баг fitToView, двухстрочный layout relation items, кликабельные версии дубликатов","Добавлена интерактивность: фильтры ghost/dup в статистике панели, просмотр оригинальных версий дубликатов","Улучшено хранение: DataModel сохраняет _versions с оригинальными entityType и observations дубликатов","Issue #11: улучшено отображение дубликатов и призраков"]}
+{"type":"entity","name":"mcp-memory-visualizer","entityType":"reference","observations":["Оригинальный визуализатор, взятый за основу для реверс-инжиниринга","Автор: dzivkovi, репозиторий: github.com/dzivkovi/mcp-memory-visualizer","Демо: dzivkovi.github.io/mcp-memory-visualizer/","Баги: crash на dangling relations, дублирование нод, хардкод refX=25 для стрелок","Использует D3.js, светлую тему, welcome screen"]}
+{"type":"entity","name":"mcp-server-memory","entityType":"dependency","observations":["MCP-сервер для управления knowledge graph через JSONL файлы","Репозиторий: github.com/modelcontextprotocol/servers/tree/main/src/memory","Операции: create_entities, delete_entities, add_observations, delete_observations, create_relations, delete_relations, search_nodes, open_nodes, read_graph","Формат: JSONL — entity {type,name,entityType,observations} и relation {type,from,to,relationType}","entityType и relationType — freeform строки без валидации"]}
+{"type":"entity","name":"D3.js","entityType":"technology","observations":["Библиотека визуализации данных, v7.8.5","Подключается с CDN: cdnjs.cloudflare.com","Используется для force-directed графа, zoom/pan, drag, SVG-рендеринга"]}
+{"type":"entity","name":"зонтичный-issue-7","entityType":"tracker","observations":["GitHub issue #7: Memory JSONL Visualizer & Editor","Содержит чеклист всех 3 фаз проекта","Фаза 1: issues #1-#6 (viewer MVP)","Фаза 2: CRUD-редактирование (локальное)","Фаза 3: MCP-интеграция"]}
+{"type":"entity","name":"issue-8-entity-types","entityType":"tracker","observations":["GitHub issue #8: Продумать интерактивность Entity Types","Направления: фильтрация по легенде, hover-подсветка, группировка, кастомные цвета"]}
+{"type":"entity","name":"issue-9-relation-types","entityType":"tracker","observations":["GitHub issue #9: Продумать интерактивность Relation Types","relationType — freeform, до 96 уникальных значений в реальных данных","Проблемы: не влезут в легенду, длинные фразы не влезут на ребро"]}
+{"type":"entity","name":"D3.js","entityType":"technology","observations":["Основа для визуализации графов в браузере"]}
+{"type":"entity","name":"D3.js","entityType":"library","observations":["Поддерживает SVG, Canvas, HTML рендеринг","Модульная архитектура: d3-force, d3-selection, d3-zoom"]}
+{"type":"entity","name":"D3.js","entityType":"technology","observations":["Документация: d3js.org","Лицензия: ISC"]}
+{"type":"entity","name":"mcp-server-memory","entityType":"dependency","observations":["Часть официального набора MCP серверов от Anthropic"]}
+{"type":"entity","name":"mcp-server-memory","entityType":"service","observations":["Хранит данные в одном файле memory.jsonl","Запускается через stdio transport"]}
+{"type":"entity","name":"mcp-server-memory","entityType":"dependency","observations":["Поддерживает поиск по именам, типам и наблюдениям"]}
+{"type":"entity","name":"mcp-server-memory","entityType":"tool","observations":["Альтернативная запись с другим entityType","Используется Claude Desktop и Claude Code"]}
+{"type":"relation","from":"server-memory-editor","to":"mcp-memory-visualizer","relationType":"reverse-engineered from"}
+{"type":"relation","from":"server-memory-editor","to":"mcp-server-memory","relationType":"visualizes data from"}
+{"type":"relation","from":"server-memory-editor","to":"D3.js","relationType":"uses"}
+{"type":"relation","from":"mcp-memory-visualizer","to":"D3.js","relationType":"uses"}
+{"type":"relation","from":"mcp-memory-visualizer","to":"mcp-server-memory","relationType":"visualizes data from"}
+{"type":"relation","from":"зонтичный-issue-7","to":"server-memory-editor","relationType":"tracks"}
+{"type":"relation","from":"issue-8-entity-types","to":"server-memory-editor","relationType":"enhances"}
+{"type":"relation","from":"issue-9-relation-types","to":"server-memory-editor","relationType":"enhances"}
+{"type":"relation","from":"server-memory-editor","to":"GitHub Pages","relationType":"deployed via"}
+{"type":"relation","from":"D3.js","to":"Mike Bostock","relationType":"created by"}
+{"type":"relation","from":"D3.js","to":"Observable","relationType":"maintained by"}
+{"type":"relation","from":"mcp-server-memory","to":"Anthropic","relationType":"developed by"}
+{"type":"relation","from":"mcp-server-memory","to":"Claude Desktop","relationType":"integrates with"}
