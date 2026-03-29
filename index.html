@@ -335,7 +335,7 @@
             stroke-linejoin: round;
         }
 
-        .dimmed { opacity: 0.1 !important; }
+        .dimmed { opacity: 0.15 !important; }
     </style>
 </head>
 <body>
@@ -416,9 +416,10 @@
                 } else if (json && typeof json === 'object' && (Array.isArray(json.entities) || Array.isArray(json.relations))) {
                     rawEntities = json.entities || [];
                     rawRelations = json.relations || [];
-                } else {
-                    // Single JSON object — treat as JSONL with one line
-                    this._parseJSONL(trimmed, rawEntities, rawRelations);
+                } else if (json && typeof json === 'object' && json.type) {
+                    // Single entity/relation object
+                    if (json.type === 'entity') rawEntities.push(json);
+                    else if (json.type === 'relation') rawRelations.push(json);
                 }
             } catch {
                 // Not valid JSON — parse as JSONL
@@ -865,7 +866,7 @@
         linkSelection.classed('dimmed', d => {
             const sName = typeof d.source === 'object' ? d.source.name : d.source;
             const tName = typeof d.target === 'object' ? d.target.name : d.target;
-            return !nameSet.has(sName) && !nameSet.has(tName);
+            return !nameSet.has(sName) || !nameSet.has(tName);
         });
     }
 

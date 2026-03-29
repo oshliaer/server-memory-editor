@@ -16,7 +16,7 @@ Version: **0.1.1** ([changelog](CHANGELOG.md))
 - **Duplicate Detection**: Identifies and merges duplicate entities with version tracking
 - **Dangling References**: Handles unresolved relations with ghost-nodes
 - **Data Export**: Export current graph state as JSONL
-- **Statistics**: Entity, relation, and type counts
+- **Statistics**: Entity and relation counts with duplicate/ghost filters
 - **Keyboard Support**: Escape to deselect nodes
 
 ## Quick Start
