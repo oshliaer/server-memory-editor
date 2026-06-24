@@ -6,7 +6,7 @@ Reverse-engineered from [mcp-memory-visualizer](https://github.com/dzivkovi/mcp-
 
 ## Version
 
-Version: **0.1.1** ([changelog](CHANGELOG.md))
+Version: **0.2.0** ([changelog](CHANGELOG.md))
 
 ## Features
 
