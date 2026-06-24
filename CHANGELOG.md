@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.0] — 2026-06-24
+
+### Added
+- Entity-type highlight: legend items are now clickable (multi-select) — selected types stay highlighted while the rest of the graph dims (#8)
+- Per-type node counts shown in the legend
+- Auto fit-to-view onto the highlighted nodes when selecting entity types or the ghost/duplicate filter, so rare/off-screen nodes are brought into view (#8, #11)
+- Ghost/duplicate filter now keeps the matched nodes' neighbours and connecting links visible for context, and marks the matched nodes with a bright ring so they stand out against the dimmed graph (#11)
+- Remember last opened file: the most recently loaded file is stored in localStorage (snapshot) and restored on the next page load; the current file name is shown in the side panel
+
 ## [0.1.1] — 2026-03-28
 
 ### Fixed

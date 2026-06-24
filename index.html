@@ -92,6 +92,7 @@
         .upload-area.dragover { border-color: #667eea; background: #f0f1ff; }
 
         #file-input { display: none; }
+        .current-file { margin-top: 8px; font-size: 12px; color: #666; word-break: break-all; }
 
         /* --- Details panel (top-right) --- */
         #details {
@@ -256,6 +257,9 @@
         }
 
         #legend strong { font-size: 13px; color: #333; }
+        #legend .legend-hint { font-size: 11px; color: #999; margin-left: 6px; }
+        .legend-count { margin-left: auto; padding-left: 12px; color: #999; font-variant-numeric: tabular-nums; }
+        .legend-item.active .legend-count { color: #0d47a1; }
 
         .legend-item {
             display: flex;
@@ -263,7 +267,14 @@
             margin-top: 6px;
             font-size: 12px;
             color: #555;
+            cursor: pointer;
+            user-select: none;
+            padding: 2px 4px;
+            border-radius: 4px;
         }
+
+        .legend-item:hover { background: #f0f0f0; }
+        .legend-item.active { background: #e3f2fd; color: #0d47a1; font-weight: 600; }
 
         .legend-color {
             width: 14px;
@@ -336,6 +347,7 @@
         }
 
         .dimmed { opacity: 0.15 !important; }
+        .node.filter-hit { stroke: #ff4444; stroke-width: 4px; stroke-dasharray: none; }
     </style>
 </head>
 <body>
@@ -362,6 +374,7 @@
             <div>Загрузить .jsonl / .json</div>
         </div>
         <input type="file" id="file-input" accept=".jsonl,.json" />
+        <div id="current-file" class="current-file"></div>
     </div>
 
     <div id="details">
@@ -380,7 +393,7 @@
     </div>
 
     <div id="legend">
-        <strong>Entity Types</strong>
+        <strong>Entity Types</strong><span class="legend-hint">клик — подсветить</span>
         <div id="legend-items"></div>
     </div>
 
@@ -718,6 +731,32 @@
             .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
     }
 
+    // Zoom/pan to fit only the given nodes (used by entity-type highlight)
+    function fitToNames(nameSet) {
+        if (!nodeSelection || !nameSet.size) return;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        nodeSelection.each(d => {
+            if (!nameSet.has(d.name)) return;
+            const r = nodeRadius(d);
+            if (d.x - r < minX) minX = d.x - r;
+            if (d.y - r < minY) minY = d.y - r;
+            if (d.x + r > maxX) maxX = d.x + r;
+            if (d.y + r > maxY) maxY = d.y + r;
+        });
+        if (!isFinite(minX)) return;
+        const pad = 80;
+        const bw = Math.max(maxX - minX, 1);
+        const bh = Math.max(maxY - minY, 1);
+        const w = width();
+        const h = height();
+        let scale = 0.9 * Math.min((w - pad * 2) / bw, (h - pad * 2) / bh);
+        scale = Math.max(0.2, Math.min(scale, 1.5)); // don't zoom a lone node to absurd level
+        const tx = w / 2 - scale * (minX + bw / 2);
+        const ty = h / 2 - scale * (minY + bh / 2);
+        svg.transition().duration(500)
+            .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+    }
+
     // Drag
     function dragStarted(event, d) {
         if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -861,6 +900,7 @@
     // Shared dimming helpers
     function dimByNameSet(nameSet) {
         if (!nodeSelection) return;
+        nodeSelection.classed('filter-hit', false); // reset; the stat-filter re-applies it after
         nodeSelection.classed('dimmed', d => !nameSet.has(d.name));
         labelSelection.classed('dimmed', d => !nameSet.has(d.name));
         linkSelection.classed('dimmed', d => {
@@ -872,7 +912,7 @@
 
     function clearDimming() {
         if (!nodeSelection) return;
-        nodeSelection.classed('dimmed', false).classed('selected', false);
+        nodeSelection.classed('dimmed', false).classed('selected', false).classed('filter-hit', false);
         linkSelection.classed('dimmed', false);
         labelSelection.classed('dimmed', false);
     }
@@ -909,21 +949,54 @@
     }
 
     // Legend
+    let activeTypes = new Set(); // entityTypes selected for highlight
+
     function updateLegend(types) {
         const container = document.getElementById('legend-items');
         container.innerHTML = '';
+        activeTypes.clear(); // types may differ after a new file is loaded
+
+        const counts = {};
+        for (const [, e] of DataModel.entities) {
+            counts[e.entityType] = (counts[e.entityType] || 0) + 1;
+        }
+
         for (const t of types) {
             const item = document.createElement('div');
             item.className = 'legend-item';
+            item.dataset.type = t;
             const circle = document.createElement('div');
             circle.className = 'legend-color';
             circle.style.backgroundColor = colorScale(t);
             const label = document.createElement('span');
             label.textContent = t;
+            const count = document.createElement('span');
+            count.className = 'legend-count';
+            count.textContent = counts[t] || 0;
             item.appendChild(circle);
             item.appendChild(label);
+            item.appendChild(count);
+            item.addEventListener('click', () => toggleType(t));
             container.appendChild(item);
         }
+    }
+
+    function toggleType(type) {
+        if (activeTypes.has(type)) activeTypes.delete(type);
+        else activeTypes.add(type);
+
+        // Legend highlight and the ghost/dup stat-filter are mutually exclusive
+        if (activeFilter) { activeFilter = null; updateStats(); }
+
+        document.querySelectorAll('#legend-items .legend-item').forEach(el => {
+            el.classList.toggle('active', activeTypes.has(el.dataset.type));
+        });
+
+        if (activeTypes.size === 0) { clearDimming(); return; }
+        const names = new Set();
+        nodeSelection.each(d => { if (activeTypes.has(d.entityType)) names.add(d.name); });
+        dimByNameSet(names);
+        fitToNames(names); // bring the highlighted (possibly rare) nodes into view
     }
 
     // Stats
@@ -963,6 +1036,12 @@
     }
 
     function toggleFilter(type) {
+        // Stat-filter and legend highlight are mutually exclusive
+        if (activeTypes.size) {
+            activeTypes.clear();
+            document.querySelectorAll('#legend-items .legend-item.active')
+                .forEach(el => el.classList.remove('active'));
+        }
         if (activeFilter === type) {
             activeFilter = null;
             clearDimming();
@@ -971,9 +1050,18 @@
             const matchFn = type === 'ghost'
                 ? d => d.isGhost
                 : d => d.duplicateCount > 1;
-            const matchNames = new Set();
-            nodeSelection.each(d => { if (matchFn(d)) matchNames.add(d.name); });
-            dimByNameSet(matchNames);
+            const hits = new Set();
+            nodeSelection.each(d => { if (matchFn(d)) hits.add(d.name); });
+
+            // Keep hits + their neighbours + connecting links visible for context
+            const context = new Set(hits);
+            for (const r of DataModel.relations) {
+                if (hits.has(r.from)) context.add(r.to);
+                if (hits.has(r.to)) context.add(r.from);
+            }
+            dimByNameSet(context);
+            nodeSelection.classed('filter-hit', d => hits.has(d.name)); // bright ring on the hits themselves
+            fitToNames(context); // bring the whole focused subgraph into view
         }
         updateStats();
     }
@@ -991,6 +1079,52 @@
     }
 
     // File loading
+    const LAST_FILE_KEY = 'memviz:lastFile';
+
+    // Parse text into the model and render. Returns true on success,
+    // leaving the previous state intact on failure.
+    function applyLoadedText(text, name) {
+        const prevEntities = new Map(DataModel.entities);
+        const prevRelations = [...DataModel.relations];
+        const prevStats = { ...DataModel._stats };
+        DataModel.loadFromText(text);
+        if (DataModel.entities.size === 0) {
+            // Restore previous state
+            DataModel.entities = prevEntities;
+            DataModel.relations = prevRelations;
+            DataModel._stats = prevStats;
+            return false;
+        }
+        render(DataModel);
+        setCurrentFile(name);
+        return true;
+    }
+
+    function setCurrentFile(name) {
+        const el = document.getElementById('current-file');
+        if (el) el.textContent = name ? '📄 ' + name : '';
+    }
+
+    function saveLastFile(name, text) {
+        try {
+            localStorage.setItem(LAST_FILE_KEY, JSON.stringify({ name, text }));
+        } catch (err) {
+            // Quota exceeded or storage disabled — non-fatal, just skip remembering.
+            console.warn('Не удалось запомнить файл:', err);
+        }
+    }
+
+    function restoreLastFile() {
+        let saved = null;
+        try {
+            saved = JSON.parse(localStorage.getItem(LAST_FILE_KEY) || 'null');
+        } catch (err) {
+            saved = null;
+        }
+        if (!saved || !saved.text) return;
+        applyLoadedText(saved.text, saved.name); // snapshot restore; re-add the file to refresh
+    }
+
     function handleFile(file) {
         if (!file) return;
         const fileName = file.name.toLowerCase();
@@ -1000,19 +1134,11 @@
         }
         const reader = new FileReader();
         reader.onload = (e) => {
-            const prevEntities = new Map(DataModel.entities);
-            const prevRelations = [...DataModel.relations];
-            const prevStats = { ...DataModel._stats };
-            DataModel.loadFromText(e.target.result);
-            if (DataModel.entities.size === 0) {
-                // Restore previous state
-                DataModel.entities = prevEntities;
-                DataModel.relations = prevRelations;
-                DataModel._stats = prevStats;
+            if (applyLoadedText(e.target.result, file.name)) {
+                saveLastFile(file.name, e.target.result);
+            } else {
                 alert('Файл не содержит данных или имеет неверный формат');
-                return;
             }
-            render(DataModel);
         };
         reader.readAsText(file);
     }
@@ -1090,6 +1216,9 @@
             const file = e.dataTransfer.files[0];
             if (file) handleFile(file);
         });
+
+        // Restore the last opened file (snapshot from localStorage)
+        restoreLastFile();
     });
     </script>
 </body>
