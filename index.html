@@ -1087,17 +1087,27 @@
         const prevEntities = new Map(DataModel.entities);
         const prevRelations = [...DataModel.relations];
         const prevStats = { ...DataModel._stats };
-        DataModel.loadFromText(text);
-        if (DataModel.entities.size === 0) {
-            // Restore previous state
+        try {
+            DataModel.loadFromText(text); // clears state first, may throw on malformed data
+            if (DataModel.entities.size === 0) {
+                throw new Error('Файл не содержит данных');
+            }
+            // Reset interaction state so it doesn't leak onto the new graph
+            activeFilter = null;
+            selectedNodeName = null;
+            document.getElementById('details').style.display = 'none';
+
+            render(DataModel);
+            setCurrentFile(name);
+            return true;
+        } catch (err) {
+            // Restore the previous valid state (loadFromText has already cleared it)
+            console.warn('Не удалось загрузить файл:', err);
             DataModel.entities = prevEntities;
             DataModel.relations = prevRelations;
             DataModel._stats = prevStats;
             return false;
         }
-        render(DataModel);
-        setCurrentFile(name);
-        return true;
     }
 
     function setCurrentFile(name) {
